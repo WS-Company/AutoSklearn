@@ -65,6 +65,10 @@
     в равномерное распределение (QuantileTransformer) или в нормальное
     (PowerTransformer)
 
+--verbosity ЧИСЛО
+    Выводить на экран отладочную информацию в процессе работы программы.
+    Чем больше значение, тем больше отладочной информации будет выведено.
+
 Примечания
 
 1.  AutoSklearnRegressor имеет временные ограничения по умолчанию.
@@ -465,7 +469,8 @@ def fit_regressor(data_filename: str,
                   final_model: str = "first",
                   auto_normalize: bool = False,
                   preprocessor: str = None,
-                  pca: int = None):
+                  pca: int = None,
+                  verbosity: int = 0):
     """
     Обучает с помощью Auto-Sklearn регрессор на массиве данных,
     считанном из data_filename и записывает в файл model_filename.
@@ -524,6 +529,11 @@ def fit_regressor(data_filename: str,
         Если задан (и не None), то перед запуском обучения привести
         данные к главным компонентам и оставить только это количество
         наиболее значимых компонент
+
+    verbosity: int, необязателен
+        Вывод отладочных сообщений в процессе работы программы. Чем
+        больше это значение, тем больше информации будет выводиться,
+        значение 0 подваляет все отладочные сообщения
     """
     # Заглушаем предупреждения, если нужно
     if quiet:
@@ -531,6 +541,13 @@ def fit_regressor(data_filename: str,
     # Считываем данные из файла, делим на обучающие и тестовые
     (X, y) = prepare_data(data_filename, auto_normalize=auto_normalize)
     (X_train, X_test, y_train, y_test) = train_test_split(X, y, random_state=0)
+    # Сообщаем пользователю, на каком объеме данных обучаем модель
+    if verbosity >= 1:
+        sys.stderr.write(
+            "Обучение модели регрессии на {} примерах по {} признаков\n".format(
+                X.shape[0], X.shape[1]
+            )
+        )
     # Обучаем регрессор AutoSklearnRegressor
     reg = fit_autosklearn_regressor(
         X_train, X_test, y_train, y_test,
@@ -541,6 +558,8 @@ def fit_regressor(data_filename: str,
         preprocessor=preprocessor,
         pca=pca
     )
+    if verbosity >= 1:
+        sys.stderr.write("Обучение модели регрессии завершено\n")
     # Получаем итоговую модель в виде произвоного класса от sklearn.BaseEstimator
     model = get_model_to_save(
         reg,
@@ -564,6 +583,7 @@ def fit_regressor(data_filename: str,
     fit_model(model, X, y, ensemble_size=ensemble_size, preprocessor=preprocessor)
     # И сохраняем в файл
     joblib.dump(model, model_filename)
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(
@@ -677,6 +697,16 @@ if __name__ == "__main__":
         dest="pca"
     )
 
+    parser.add_argument(
+        "--verbosity",
+        help="Выводить на экран отладочную информацию в просессе работы",
+        action="store",
+        type=int,
+        default=0,
+        metavar="VALUE",
+        dest="verbosity"
+    )
+
     args = parser.parse_args()
 
     fit_regressor(
@@ -690,6 +720,7 @@ if __name__ == "__main__":
         final_model=args.final_model,
         auto_normalize=args.auto_normalize,
         preprocessor=args.preprocessor,
-        pca=args.pca
+        pca=args.pca,
+        verbosity=args.verbosity
     )
 
