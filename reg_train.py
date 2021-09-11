@@ -670,7 +670,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pca",
         help="Привести к главным компонентам и оставить наиболее значимые",
-        action=store,
+        action="store",
         type=int,
         default=None,
         metavar="N_COMPONENTS",
