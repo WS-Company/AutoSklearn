@@ -453,7 +453,9 @@ def get_model_to_save(reg,
     elif get_what == "source":
         pass
     else:
-        raise ValueError("Допустимые значения get_what - это first, voting и source, а не {}".format(get_what))
+        raise ValueError(
+            "Допустимые значения get_what - это first, voting и source, а не {}".format(get_what)
+        )
     model = pack_model(model, preprocessor)
     return model
 
@@ -559,7 +561,7 @@ def fit_regressor(data_filename: str,
         pca=pca
     )
     if verbosity >= 1:
-        sys.stderr.write("Обучение модели регрессии завершено\n")
+        sys.stderr.write("Обучение модели регрессии AutoSklearn завершено\n")
     # Получаем итоговую модель в виде произвоного класса от sklearn.BaseEstimator
     model = get_model_to_save(
         reg,
@@ -569,7 +571,11 @@ def fit_regressor(data_filename: str,
     )
     # Еще раз обучаем
     if preprocessor or final_model != "source":
-        fit_model(model, X_train, y_train, ensemble_size=ensemble_size, preprocessor=preprocessor)
+        fit_model(
+            model, X_train, y_train,
+            ensemble_size=ensemble_size,
+            preprocessor=preprocessor
+        )
     # И показываем метрики качества модели
     display_model_score(
         X_train, y_train, model,
@@ -580,7 +586,11 @@ def fit_regressor(data_filename: str,
         model_name="итоговой модели", data_name="тестовых данных"
     )
     # Теперь обучаем на всем массиве данных
-    fit_model(model, X, y, ensemble_size=ensemble_size, preprocessor=preprocessor)
+    fit_model(
+        model, X, y,
+        ensemble_size=ensemble_size,
+        preprocessor=preprocessor
+    )
     # И сохраняем в файл
     joblib.dump(model, model_filename)
 
@@ -723,4 +733,3 @@ if __name__ == "__main__":
         pca=args.pca,
         verbosity=args.verbosity
     )
-
