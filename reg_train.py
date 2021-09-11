@@ -56,6 +56,10 @@
     Использовать дополнительные механизмы автоматической нормализации
     данных перед обучением.
 
+--pca ЧИСЛО
+    Перед запуском обучения привести матрицу признаков к главным
+    компонентам, и оствить это количество наиболее значимых из них
+
 --preprocessor=power|quantile
     Перед передачай данных модели Auto-Sklearn преобразовать их
     в равномерное распределение (QuantileTransformer) или в нормальное
@@ -88,6 +92,7 @@ from sklearn.metrics import mean_squared_error
 from autonormalize import autonormalize
 
 from sklearn.pipeline import Pipeline
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.preprocessing import PowerTransformer
 
@@ -234,10 +239,12 @@ def display_model_score(X,
     )
 
 
-def pack_model(reg, preprocessor: str = None):
+def pack_model(reg, preprocessor: str = None, pca: int = None):
     """
     Упаковывает модель reg в Pipeline с препроцессором,
-    определенным параметром preprocessor.
+    определенным параметрами preprocessor и pca. В настоящее
+    время допускается использование только одного из
+    двух параметров preprocessor и pca.
 
     Параметры
     ---------
@@ -250,6 +257,10 @@ def pack_model(reg, preprocessor: str = None):
         предварительной обработки признаков - sklearn.PowerTransformer,
         sklearn.QuantileTransformer или ничего.
 
+    pca: int, необязателен
+        Если задан (и не None), то перед запуском обучения привести
+        данные к главным компонентам и оставить только это количество
+        наиболее значимых компонент.
 
     Возвращает
     ----------
@@ -257,16 +268,25 @@ def pack_model(reg, preprocessor: str = None):
         Комбинированный регрессор, сочетающий reg с указанным
         препроцессором, или reg, если препроцессор не указан
     """
-    if not preprocessor:
+    if not preprocessor and pca is None:
         return reg
-    elif preprocessor.lower() == "quantile":
+    if pca:
+        if not preprocessor:
+            return Pipeline(
+                [
+                    ('pca', PCA(n_components=pca)),
+                    ('reg', reg)
+                ]
+            )
+        raise ValueError("Опции pca и preprocessor пока что взаимоисключающие")
+    if preprocessor.lower() == "quantile":
         return Pipeline(
             [
                 ('pre', QuantileTransformer()),
                 ('reg', reg)
             ]
         )
-    elif preprocessor.lower() == "power":
+    if preprocessor.lower() == "power":
         return Pipeline(
             [
                 ('pre', PowerTransformer()),
@@ -285,7 +305,8 @@ def fit_autosklearn_regressor(X_train,
                               time_limit_per_model: int = None,
                               n_jobs: int = -1,
                               ensemble_size: int = 1,
-                              preprocessor: str = None):
+                              preprocessor: str = None,
+                              pca: int = None):
     """
     Создаем Auto-SkLearn регрессор и устанавливаем временные
     ограничения для его работы при необходимости. Обучаем с
@@ -328,6 +349,11 @@ def fit_autosklearn_regressor(X_train,
         предварительной обработки признаков - sklearn.PowerTransformer,
         sklearn.QuantileTransformer или ничего.
 
+    pca: int, необязателен
+        Если задан (и не None), то перед запуском обучения привести
+        данные к главным компонентам и оставить только это количество
+        наиболее значимых компонент
+
     Возвращает
     ----------
     reg : AutoSklearnRegressor
@@ -339,9 +365,15 @@ def fit_autosklearn_regressor(X_train,
     if time_limit_per_model:
         kwargs['per_run_time_limit'] = time_limit_per_model
     reg = AutoSklearnRegressor(**kwargs)
-    reg = pack_model(reg, preprocessor)
+    reg = pack_model(reg, preprocessor, pca)
     # Обучаем модель
-    fit_model(reg, X_train, y_train, ensemble_size=ensemble_size, preprocessor=preprocessor)
+    fit_model(
+        reg,
+        X_train,
+        y_train,
+        ensemble_size=ensemble_size,
+        preprocessor=preprocessor
+    )
     display_model_score(
         X_train, y_train, reg,
         model_name="AutoSklearn",
@@ -432,7 +464,8 @@ def fit_regressor(data_filename: str,
                   ensemble_size: int = 1,
                   final_model: str = "first",
                   auto_normalize: bool = False,
-                  preprocessor: str = None):
+                  preprocessor: str = None,
+                  pca: int = None):
     """
     Обучает с помощью Auto-Sklearn регрессор на массиве данных,
     считанном из data_filename и записывает в файл model_filename.
@@ -482,10 +515,15 @@ def fit_regressor(data_filename: str,
 
         *   "source" - сохранить сам объект AutoSklearnRegressor.
 
-    preprocessor : строка
+    preprocessor: str, необязателен
         Может быть "power", "quantile" или None. Указывает способ
         предварительной обработки признаков - sklearn.PowerTransformer,
         sklearn.QuantileTransformer или ничего.
+
+    pca: int, необязателен
+        Если задан (и не None), то перед запуском обучения привести
+        данные к главным компонентам и оставить только это количество
+        наиболее значимых компонент
     """
     # Заглушаем предупреждения, если нужно
     if quiet:
@@ -500,7 +538,8 @@ def fit_regressor(data_filename: str,
         time_limit_per_model=time_limit_per_model,
         n_jobs=n_jobs,
         ensemble_size=ensemble_size,
-        preprocessor=preprocessor
+        preprocessor=preprocessor,
+        pca=pca
     )
     # Получаем итоговую модель в виде произвоного класса от sklearn.BaseEstimator
     model = get_model_to_save(
@@ -628,6 +667,16 @@ if __name__ == "__main__":
         dest="preprocessor"
     )
 
+    parser.add_argument(
+        "--pca",
+        help="Привести к главным компонентам и оставить наиболее значимые",
+        action=store,
+        type=int,
+        default=None,
+        metavar="N_COMPONENTS",
+        dest="pca"
+    )
+
     args = parser.parse_args()
 
     fit_regressor(
@@ -640,6 +689,7 @@ if __name__ == "__main__":
         ensemble_size=args.ensemble_size,
         final_model=args.final_model,
         auto_normalize=args.auto_normalize,
-        preprocessor=args.preprocessor
+        preprocessor=args.preprocessor,
+        pca=args.pca
     )
 
