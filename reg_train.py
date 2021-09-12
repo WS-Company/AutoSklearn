@@ -79,6 +79,7 @@
 import sys
 import warnings
 import joblib
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -550,6 +551,7 @@ def fit_regressor(data_filename: str,
                 X.shape[0], X.shape[1]
             )
         )
+        start = datetime.datetime.now()
     # Обучаем регрессор AutoSklearnRegressor
     reg = fit_autosklearn_regressor(
         X_train, X_test, y_train, y_test,
@@ -562,6 +564,13 @@ def fit_regressor(data_filename: str,
     )
     if verbosity >= 1:
         sys.stderr.write("Обучение модели регрессии AutoSklearn завершено\n")
+        end = datetime.datetime.now()
+        if verbosity >= 2:
+            sys.stderr.write(
+                "Обучение длилось {:2f} секунд\n".format(
+                    (end - start).total_seconds()
+                )
+            )
     # Получаем итоговую модель в виде произвоного класса от sklearn.BaseEstimator
     model = get_model_to_save(
         reg,

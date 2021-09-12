@@ -8,7 +8,7 @@
 # import modin.pandas as pd
 
 import ray
-ray.init(num_cpus=36, num_gpus=2)
+ray.init(num_cpus=2, num_gpus=0)
 # Modin will connect to the existing Ray environment
 import modin.pandas as pd
 
