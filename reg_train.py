@@ -88,21 +88,23 @@ from argparse import ArgumentParser
 
 from autosklearn.regression import AutoSklearnRegressor
 
+from autonormalize import autonormalize
+
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import VotingRegressor
 
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 
-from autonormalize import autonormalize
-
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.preprocessing import PowerTransformer
 
+from xgboost import XGBRegressor
 
-def prepare_data(filename, auto_normalize: bool = False):
+
+def prepare_data(filename: str, auto_normalize: bool = False):
     """
     Считывает данные из файла filename, отделяет последний столбец
     как столбец целевых значений, остальное - как матрицу признаков
@@ -192,16 +194,15 @@ def fit_model(model,
                 )
         else:
             model.fit(X, y)
+    elif isinstance(model, AutoSklearnRegressor):
+        model.fit(X, y)
+        if ensemble_size:
+            model.fit_ensemble(
+                y,
+                ensemble_size=ensemble_size
+            )
     else:
-        if isinstance(model, AutoSklearnRegressor):
-            model.fit(X, y)
-            if ensemble_size:
-                model.fit_ensemble(
-                    y,
-                    ensemble_size=ensemble_size
-                )
-        else:
-            model.fit(X, y)
+        model.fit(X, y)
     return model
 
 
@@ -311,7 +312,8 @@ def fit_autosklearn_regressor(X_train,
                               n_jobs: int = -1,
                               ensemble_size: int = 1,
                               preprocessor: str = None,
-                              pca: int = None):
+                              pca: int = None,
+                              use_xgboost: bool = False):
     """
     Создаем Auto-SkLearn регрессор и устанавливаем временные
     ограничения для его работы при необходимости. Обучаем с
@@ -359,6 +361,11 @@ def fit_autosklearn_regressor(X_train,
         данные к главным компонентам и оставить только это количество
         наиболее значимых компонент
 
+    use_xgboost: bool, по умолчанию False
+        Если равен True, то вместо AutoSklearnRegressor обучать модель
+        XGBRegressor. Эта опция поможет тестировать изменения в предобработке
+        данных быстрее, так как AutoSklearnRegressor намного медленнее
+
     Возвращает
     ----------
     reg : AutoSklearnRegressor
@@ -369,7 +376,10 @@ def fit_autosklearn_regressor(X_train,
         kwargs['time_left_for_this_task'] = time_limit
     if time_limit_per_model:
         kwargs['per_run_time_limit'] = time_limit_per_model
-    reg = AutoSklearnRegressor(**kwargs)
+    if use_xgboost:
+        reg = XGBRegressor(random_state=0)
+    else:
+        reg = AutoSklearnRegressor(**kwargs)
     reg = pack_model(reg, preprocessor, pca)
     # Обучаем модель
     fit_model(
@@ -396,7 +406,8 @@ def get_model_to_save(reg,
                       *,
                       n_jobs=-1,
                       get_what: str = "first",
-                      preprocessor: str = None):
+                      preprocessor: str = None,
+                      pca: int = None):
     """
     Получаем итоговую модель в виде объекта производного класса от
     sklearn.BaseEstimator
@@ -424,10 +435,16 @@ def get_model_to_save(reg,
 
         *   "source" - просто вернуть значение reg.
 
-    preprocessor : строка
+    preprocessor: str, необязателен
         Может быть "power", "quantile" или None. Указывает способ
         предварительной обработки признаков - sklearn.PowerTransformer,
         sklearn.QuantileTransformer или ничего.
+
+    pca: int, необязателен
+        Если он задан, то считать иходную модель конвейром, в котором
+        регрессор вызывается после обработки методом главных компонент
+        с заданным параметром n_components. Возвращаемая модель также
+        будет упакована в конвейр с указанным преобразованием в начале
 
     Возвращает
     ----------
@@ -435,10 +452,12 @@ def get_model_to_save(reg,
         Найденная наилучшая модель scikit-learn, извлеченная из
         регрессора Auto-Sklearn
     """
-    if preprocessor:
+    if preprocessor or pca:
         model = reg.steps[1][1]
     else:
         model = reg
+    if not hasattr(model, "get_models_with_weights"):
+        return pack_model(model, preprocessor, pca)
     lst = model.get_models_with_weights()
     estimators = []
     weights = []
@@ -457,7 +476,7 @@ def get_model_to_save(reg,
         raise ValueError(
             "Допустимые значения get_what - это first, voting и source, а не {}".format(get_what)
         )
-    model = pack_model(model, preprocessor)
+    model = pack_model(model, preprocessor, pca)
     return model
 
 
@@ -473,7 +492,8 @@ def fit_regressor(data_filename: str,
                   auto_normalize: bool = False,
                   preprocessor: str = None,
                   pca: int = None,
-                  verbosity: int = 0):
+                  verbosity: int = 0,
+                  use_xgboost: bool = False):
     """
     Обучает с помощью Auto-Sklearn регрессор на массиве данных,
     считанном из data_filename и записывает в файл model_filename.
@@ -537,6 +557,11 @@ def fit_regressor(data_filename: str,
         Вывод отладочных сообщений в процессе работы программы. Чем
         больше это значение, тем больше информации будет выводиться,
         значение 0 подваляет все отладочные сообщения
+
+    use_xgboost: bool, по умолчанию False
+        Если равен True, то вместо AutoSklearnRegressor обучать модель
+        XGBRegressor. Эта опция поможет тестировать изменения в предобработке
+        данных быстрее, так как AutoSklearnRegressor намного медленнее
     """
     # Заглушаем предупреждения, если нужно
     if quiet:
@@ -560,7 +585,8 @@ def fit_regressor(data_filename: str,
         n_jobs=n_jobs,
         ensemble_size=ensemble_size,
         preprocessor=preprocessor,
-        pca=pca
+        pca=pca,
+        use_xgboost=use_xgboost
     )
     if verbosity >= 1:
         sys.stderr.write("Обучение модели регрессии AutoSklearn завершено\n")
@@ -576,7 +602,8 @@ def fit_regressor(data_filename: str,
         reg,
         n_jobs=n_jobs,
         get_what=final_model,
-        preprocessor=preprocessor
+        preprocessor=preprocessor,
+        pca=pca
     )
     # Еще раз обучаем
     if preprocessor or final_model != "source":
@@ -726,6 +753,15 @@ if __name__ == "__main__":
         dest="verbosity"
     )
 
+    parser.add_argument(
+        "--use-xgboost",
+        help="Использовать XGBRegressor вместо AutoSklearnRegressor",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="use_xgboost"
+    )
+
     args = parser.parse_args()
 
     fit_regressor(
@@ -740,5 +776,6 @@ if __name__ == "__main__":
         auto_normalize=args.auto_normalize,
         preprocessor=args.preprocessor,
         pca=args.pca,
-        verbosity=args.verbosity
+        verbosity=args.verbosity,
+        use_xgboost=args.use_xgboost
     )
