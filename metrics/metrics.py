@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 
 
-def get_assymetric_mse(factor: float = 4):
+def get_assymmetric_mse(factor: float = 4):
     """
     Создает функцию метрики для обучения моделей регрессии. Создаваемая
     функция будет аналогична среднеквадратичной ошибке, однако ошибки
@@ -30,14 +30,17 @@ def get_assymetric_mse(factor: float = 4):
         Функция, возвращающая скорректированную среднеквадратичную ошибку.
         Имеет те же параметры, что и sklearn.metrics.mean_squared_error
     """
-    def mse(y_true, y_pred, *, sample_weight = None, squared: bool = True):
+    def mse(y_true, y_pred, *,
+            sample_weight = None,
+            multioutput='uniform_average',
+            squared: bool = True):
         """Скорректированная среднеквадратичная ошибка"""
-        if sample_weight is None:
-            sample_weight = np.ones(y_true.shape)
-        sample_weight[abs(y_pred) > abs(y_true)] *= factor
+        mult = np.ones(y_true.shape)
+        mult[np.abs(y_pred) > np.abs(y_true)] *= factor
         return mean_squared_error(
-            y_true, y_pred,
+            y_true * mult, y_pred * mult,
             sample_weight=sample_weight,
+            multioutput=multioutput,
             squared=squared
         )
 

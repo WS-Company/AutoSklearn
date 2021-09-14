@@ -88,6 +88,8 @@ from argparse import ArgumentParser
 
 from autosklearn.regression import AutoSklearnRegressor
 
+from autosklearn.metric import make_scorer
+
 from autonormalize import autonormalize
 
 from sklearn.model_selection import train_test_split
@@ -102,6 +104,8 @@ from sklearn.preprocessing import QuantileTransformer
 from sklearn.preprocessing import PowerTransformer
 
 from xgboost import XGBRegressor
+
+from .metrics import get_assymetric_mse
 
 
 def prepare_data(filename: str, auto_normalize: bool = False):
@@ -151,7 +155,8 @@ def fit_model(model,
               y,
               *,
               ensemble_size: int = 1,
-              preprocessor: str = None):
+              preprocessor: str = None,
+              scorer=None):
     """
     Обучает модель model на матрице признаков X и векторе целевых
     переменных y. Если модель имеет тип AutoSklearnRegressor, то
@@ -179,6 +184,8 @@ def fit_model(model,
         предварительной обработки признаков - sklearn.PowerTransformer,
         sklearn.QuantileTransformer или ничего.
 
+    scorer: Scorer, необязателен
+
     Возвращает
     ----------
     model : sklearn.BaseEstimator
@@ -186,7 +193,7 @@ def fit_model(model,
     """
     if preprocessor:
         if isinstance(model.steps[1][1], AutoSklearnRegressor):
-            model.fit(X, y)
+            model.fit(X, y, scorer=scorer)
             if ensemble_size:
                 model.steps[1][1].fit_ensemble(
                     y,
@@ -195,7 +202,7 @@ def fit_model(model,
         else:
             model.fit(X, y)
     elif isinstance(model, AutoSklearnRegressor):
-        model.fit(X, y)
+        model.fit(X, y, scorer=scorer)
         if ensemble_size:
             model.fit_ensemble(
                 y,
@@ -493,7 +500,8 @@ def fit_regressor(data_filename: str,
                   preprocessor: str = None,
                   pca: int = None,
                   verbosity: int = 0,
-                  use_xgboost: bool = False):
+                  use_xgboost: bool = False,
+                  metric_assymmetry: float = 1):
     """
     Обучает с помощью Auto-Sklearn регрессор на массиве данных,
     считанном из data_filename и записывает в файл model_filename.
@@ -562,10 +570,27 @@ def fit_regressor(data_filename: str,
         Если равен True, то вместо AutoSklearnRegressor обучать модель
         XGBRegressor. Эта опция поможет тестировать изменения в предобработке
         данных быстрее, так как AutoSklearnRegressor намного медленнее
+
+    metric_assymmetry: float, по умолчанию 1
+        Если отличен от 1, то штрафовать модель за предсказания, по модулю
+        большие, чем истинные значения целевой переменной сильнее (в это число
+        раз) чем за предсказания, оказавшиеся ближе к нулю. Если значение
+        больше 1, то мы заставим модель пытаться предсказать по возможности
+        меньшие по модулю значения, а если больше - то по возможности большие.
     """
     # Заглушаем предупреждения, если нужно
     if quiet:
         warnings.filterwarnings('ignore')
+    # Функция для оценки результатов модели
+    if metric_assymmetry:
+        scorer = make_scorer(
+            get_assymmetric_mse(metric_assymmetry),
+            greater_is_better=False,
+            optimum=0,
+            worst_possible_result=999999999
+        )
+    else:
+        scorer = None
     # Считываем данные из файла, делим на обучающие и тестовые
     (X, y) = prepare_data(data_filename, auto_normalize=auto_normalize)
     (X_train, X_test, y_train, y_test) = train_test_split(X, y, random_state=0)
@@ -762,6 +787,16 @@ if __name__ == "__main__":
         dest="use_xgboost"
     )
 
+    parser.add_argument(
+        "--metric-assymmetry",
+        help="Штрафовать модель за большие по модулю предсказания сильнее, чем за меньшие"
+        action="store",
+        type=float,
+        default=1,
+        metavar="FACTOR",
+        dest="metric_assymmetry"
+    )
+
     args = parser.parse_args()
 
     fit_regressor(
@@ -777,5 +812,6 @@ if __name__ == "__main__":
         preprocessor=args.preprocessor,
         pca=args.pca,
         verbosity=args.verbosity,
-        use_xgboost=args.use_xgboost
+        use_xgboost=args.use_xgboost,
+        metric_assymmetry=args.metric_assymmetry
     )
