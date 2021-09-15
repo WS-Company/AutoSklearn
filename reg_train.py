@@ -90,7 +90,7 @@ from autosklearn.regression import AutoSklearnRegressor
 
 from autosklearn.metrics import make_scorer
 
-#from autonormalize import autonormalize
+# from autonormalize import autonormalize
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import VotingRegressor
@@ -214,7 +214,8 @@ def display_model_score(X,
                         y,
                         model,
                         model_name: str = "модели",
-                        data_name: str = "тестовых данных"):
+                        data_name: str = "тестовых данных",
+                        metric_assymmetry: float = None):
     """
     Выводин на экран информацию о метриках качества модели
 
@@ -235,6 +236,10 @@ def display_model_score(X,
     data_name : строка, по умолчанию "тестовых данных"
         Как будет назван набор данных в выводимых на экран
         сообщениях
+
+    metric_assymmetry: float, необязателен
+        Ассиметрия метрики. Если задан, то вывести не только среднеквадратичную
+        ошибку, но и ассиметричную среднеквадратичную ошибку с этим параметром
     """
     y_pred = model.predict(X)
     sys.stdout.write(
@@ -242,6 +247,12 @@ def display_model_score(X,
             model_name, data_name, mean_squared_error(y, y_pred)
         )
     )
+    if metric_assymmetry is not None:
+        sys.stdout.write(
+            "Ассиметричная среднеквадратичная ошибка {} на {} равна {}\n".format(
+                model_name, data_name, assymmetric_mse(y, y_pred, extra_argument=metric_assymmetry)
+            )
+        )
     sys.stdout.write(
         "Коэффициент детерминации {} на {} равен {}\n".format(
             model_name, data_name, r2_score(y, y_pred)
@@ -387,7 +398,6 @@ def fit_autosklearn_regressor(X_train,
         kwargs['per_run_time_limit'] = time_limit_per_model
     if scorer:
         kwargs['metric'] = scorer
-        kwargs["n_jobs"] = -1
     if use_xgboost:
         reg = XGBRegressor(random_state=0)
     else:
@@ -651,11 +661,13 @@ def fit_regressor(data_filename: str,
     # И показываем метрики качества модели
     display_model_score(
         X_train, y_train, model,
-        model_name="итоговой модели", data_name="обучающих данных"
+        model_name="итоговой модели", data_name="обучающих данных",
+        metric_assymmetry=metric_assymmetry
     )
     display_model_score(
         X_test, y_test, model,
-        model_name="итоговой модели", data_name="тестовых данных"
+        model_name="итоговой модели", data_name="тестовых данных",
+        metric_assymmetry=metric_assymmetry
     )
     # Теперь обучаем на всем массиве данных
     fit_model(

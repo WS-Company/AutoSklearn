@@ -3,6 +3,8 @@
 """
 
 import numpy as np
+import sys
+import warnings
 
 from sklearn.metrics import mean_squared_error
 
@@ -33,11 +35,15 @@ def assymmetric_mse(y_true, y_pred, *,
         Любое расхождение, при котором предсказанное значение больше по
         модулю, чем целевое, умножать на это число
     """
+    # Параметр y_pred здесь оказывается одномерным, а y_true
+    # двумерным с одним измерением равным 1
+    y_pred = y_pred.reshape(y_true.shape)
     mult = np.ones(y_true.shape)
     mult[np.abs(y_pred) > np.abs(y_true)] *= extra_argument
-    return mean_squared_error(
+    value = mean_squared_error(
         y_true * mult, y_pred * mult,
         sample_weight=sample_weight,
         multioutput=multioutput,
         squared=squared
     )
+    return value
