@@ -7,41 +7,37 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 
 
-def get_assymmetric_mse(factor: float = 4):
+def assymmetric_mse(y_true, y_pred, *,
+                    sample_weight = None,
+                    multioutput='uniform_average',
+                    squared: bool = True,
+                    extra_argument: float = 1):
     """
-    Создает функцию метрики для обучения моделей регрессии. Создаваемая
-    функция будет аналогична среднеквадратичной ошибке, однако ошибки
-    в сторону от 0 будут считаться в `factor` раз более весомыми, чем
-    ошибки в сторону 0. То есть, если значение y_true = 10, то возврат
-    y_pred = 11 будет считаться более существенной ошибкой модели, чем
-    возврат y_pred = 9.
+    Ассмтетричная среднеквадратичная ошибка
 
     Параметры
     ---------
-    factor: float, по умолчанию 4
-        Во сколько раз ошибки в большую по модулю сторону считаются более
-        грубыми, чем в меньшую. Значение должно быть положительным, значение
-        1 означает что ошибки в обе стороны будут равноценны, а меньше
-        1 - что ошибка к 0 более грубая, чем от 0.
+    y_true: numpy.array, shape (n.samples, n_features)
+        Настоящие значения целевой переменной
 
-    Возвращает
-    ----------
-    mse: callable
-        Функция, возвращающая скорректированную среднеквадратичную ошибку.
-        Имеет те же параметры, что и sklearn.metrics.mean_squared_error
+    y_pred: numpy.array, shape (n.samples, n_features)
+        Предсказанные значения целевой переменной
+
+    sample_weight: array, shape (n_samples), необязателен
+
+    multioutput: str, необязателен
+
+    squared: bool, по умолчанию True
+
+    extra_argument: float, по умолчанию 1
+        Любое расхождение, при котором предсказанное значение больше по
+        модулю, чем целевое, умножать на это число
     """
-    def mse(y_true, y_pred, *,
-            sample_weight = None,
-            multioutput='uniform_average',
-            squared: bool = True):
-        """Скорректированная среднеквадратичная ошибка"""
-        mult = np.ones(y_true.shape)
-        mult[np.abs(y_pred) > np.abs(y_true)] *= factor
-        return mean_squared_error(
-            y_true * mult, y_pred * mult,
-            sample_weight=sample_weight,
-            multioutput=multioutput,
-            squared=squared
-        )
-
-    return mse
+    mult = np.ones(y_true.shape)
+    mult[np.abs(y_pred) > np.abs(y_true)] *= extra_argument
+    return mean_squared_error(
+        y_true * mult, y_pred * mult,
+        sample_weight=sample_weight,
+        multioutput=multioutput,
+        squared=squared
+    )

@@ -88,9 +88,9 @@ from argparse import ArgumentParser
 
 from autosklearn.regression import AutoSklearnRegressor
 
-from autosklearn.metric import make_scorer
+from autosklearn.metrics import make_scorer
 
-from autonormalize import autonormalize
+#from autonormalize import autonormalize
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import VotingRegressor
@@ -105,7 +105,7 @@ from sklearn.preprocessing import PowerTransformer
 
 from xgboost import XGBRegressor
 
-from .metrics import get_assymetric_mse
+from metrics import assymmetric_mse
 
 
 def prepare_data(filename: str, auto_normalize: bool = False):
@@ -155,8 +155,7 @@ def fit_model(model,
               y,
               *,
               ensemble_size: int = 1,
-              preprocessor: str = None,
-              scorer=None):
+              preprocessor: str = None):
     """
     Обучает модель model на матрице признаков X и векторе целевых
     переменных y. Если модель имеет тип AutoSklearnRegressor, то
@@ -184,8 +183,6 @@ def fit_model(model,
         предварительной обработки признаков - sklearn.PowerTransformer,
         sklearn.QuantileTransformer или ничего.
 
-    scorer: Scorer, необязателен
-
     Возвращает
     ----------
     model : sklearn.BaseEstimator
@@ -193,7 +190,7 @@ def fit_model(model,
     """
     if preprocessor:
         if isinstance(model.steps[1][1], AutoSklearnRegressor):
-            model.fit(X, y, scorer=scorer)
+            model.fit(X, y)
             if ensemble_size:
                 model.steps[1][1].fit_ensemble(
                     y,
@@ -202,7 +199,7 @@ def fit_model(model,
         else:
             model.fit(X, y)
     elif isinstance(model, AutoSklearnRegressor):
-        model.fit(X, y, scorer=scorer)
+        model.fit(X, y)
         if ensemble_size:
             model.fit_ensemble(
                 y,
@@ -320,7 +317,8 @@ def fit_autosklearn_regressor(X_train,
                               ensemble_size: int = 1,
                               preprocessor: str = None,
                               pca: int = None,
-                              use_xgboost: bool = False):
+                              use_xgboost: bool = False,
+                              scorer=None):
     """
     Создаем Auto-SkLearn регрессор и устанавливаем временные
     ограничения для его работы при необходимости. Обучаем с
@@ -373,6 +371,10 @@ def fit_autosklearn_regressor(X_train,
         XGBRegressor. Эта опция поможет тестировать изменения в предобработке
         данных быстрее, так как AutoSklearnRegressor намного медленнее
 
+    scorer: autosklearn.metrics.Scorer, необязателен
+        Используемая метрика качества обучаемых моделей. По умолчанию
+        используется среднеквадратичная ошибка
+
     Возвращает
     ----------
     reg : AutoSklearnRegressor
@@ -383,6 +385,9 @@ def fit_autosklearn_regressor(X_train,
         kwargs['time_left_for_this_task'] = time_limit
     if time_limit_per_model:
         kwargs['per_run_time_limit'] = time_limit_per_model
+    if scorer:
+        kwargs['metric'] = scorer
+        kwargs["n_jobs"] = -1
     if use_xgboost:
         reg = XGBRegressor(random_state=0)
     else:
@@ -578,16 +583,21 @@ def fit_regressor(data_filename: str,
         больше 1, то мы заставим модель пытаться предсказать по возможности
         меньшие по модулю значения, а если больше - то по возможности большие.
     """
+    if metric_assymmetry and use_xgboost:
+        raise NotImplementedError("Ассиметричная метрика не работает с XGBoost")
     # Заглушаем предупреждения, если нужно
     if quiet:
         warnings.filterwarnings('ignore')
     # Функция для оценки результатов модели
     if metric_assymmetry:
         scorer = make_scorer(
-            get_assymmetric_mse(metric_assymmetry),
+            "assymmetric_error",
+            assymmetric_mse,
             greater_is_better=False,
             optimum=0,
-            worst_possible_result=999999999
+            needs_proba=False,
+            needs_threshold=False,
+            extra_argument=metric_assymmetry
         )
     else:
         scorer = None
@@ -611,7 +621,8 @@ def fit_regressor(data_filename: str,
         ensemble_size=ensemble_size,
         preprocessor=preprocessor,
         pca=pca,
-        use_xgboost=use_xgboost
+        use_xgboost=use_xgboost,
+        scorer=scorer
     )
     if verbosity >= 1:
         sys.stderr.write("Обучение модели регрессии AutoSklearn завершено\n")
@@ -789,10 +800,10 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--metric-assymmetry",
-        help="Штрафовать модель за большие по модулю предсказания сильнее, чем за меньшие"
+        help="Штрафовать модель за большие по модулю предсказания сильнее, чем за меньшие",
         action="store",
         type=float,
-        default=1,
+        default=None,
         metavar="FACTOR",
         dest="metric_assymmetry"
     )
