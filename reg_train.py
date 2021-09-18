@@ -109,7 +109,7 @@ from autosklearn.regression import AutoSklearnRegressor
 
 from autosklearn.metrics import make_scorer
 
-# from autonormalize import autonormalize
+from autolearn.autonormalize import autonormalize
 
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import VotingRegressor
