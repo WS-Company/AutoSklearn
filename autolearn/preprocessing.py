@@ -5,8 +5,8 @@
 import pandas as pd
 
 from sklearn.decomposition import PCA
-
 from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
 
 from autolearn.autonormalizetransformer import AutoNormalizeTransformer
 
@@ -91,6 +91,37 @@ class DataPreprocessor:
             return self._pipeline.transform(X, y)
         return X
 
+    def fit_transform(self, X, y = None):
+        if self._pipeline is not None:
+            return self._pipeline.fit_transform(X, y)
+        return X
+
+    def load_data(self, filename: str):
+        """
+        Загружает данные из файла, применяя к ним необходимые преобразования
+        """
+        (X, y) = self.read_data(filename)
+        return (self.fit_transform(X, y), y)
+
+    def load_train_test(self,
+                        filename: str,
+                        *,
+                        test_size: float = 0.2):
+        """
+        Загружает данные из CSV-файла, разделяет их на обучающие и тестовые
+        и выполняет все преобразования исходных данных
+        """
+        (X, y) = self.read_data(filename)
+        (
+            X_train, X_test, y_train, y_test
+        ) = train_test_split(
+            X, y, test_size = test_size
+        )
+        self.fit(X_train, y_train)
+        X_train = self.transform(X_train, y_train)
+        X_test = self.transform(X_test, y_test)
+        return (X_train, X_test, y_train, y_test)
+
     def get_pipeline(self):
         steps = self.get_pipeline_steps()
         if steps:
@@ -105,3 +136,24 @@ class DataPreprocessor:
             steps.append(("pca", PCA(n_components=self.pca)))
         if self.auto_normalize_after_transform:
             steps.append(("autonorm", AutoNormalizeTransformer()))
+
+    def wrap_model(self, model):
+        """
+        Упаковывает модель в конвейр вместе с несколькими препроцессорами
+
+        Параметры
+        ---------
+        model: sklearn.BaseEstimator
+            Модель классификации или регрессии Scikit-Learn или другого
+            фреймворка с совместимым интерфейсом. Может быть как
+            классификатором, так и регрессором.
+
+        Возвращает
+        ----------
+        packed: sklearn.Pipeline
+            Конвейр Scikit-Learn, содержащий model в качестве последней
+            модели в цепочке, а перед ней - все предобработчики данных.
+        """
+        steps = self.get_pipeline_steps()
+        steps.append(("model", model))
+        return Pipeline(steps)
