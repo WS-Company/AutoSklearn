@@ -69,6 +69,25 @@
     Выводить на экран отладочную информацию в процессе работы программы.
     Чем больше значение, тем больше отладочной информации будет выведено.
 
+--metric-assymmetry ЧИСЛО
+    Указать значение ассиметрии метрики. Если оно больше 1, то предсказание
+    моделью большего по модулю числа, чем есть на самом деле, будет считаться
+    более серьезной ошибкой, чем предсказание меньшего по модулю числа,
+    отличающегося на столько же. Если меньше 1, то предпочтительными станут
+    ошибки в сторону большего по модулю числа.
+
+--remove-columns СПИСОК
+    Удалить из исходных данных столбцы с указанными номерами. Номера
+    столбцов задаются в формате списка диапазонов или отдельных чисел -
+    например, "1,3,7-9,15-20" удалить первый столбец, третий, с седьмого
+    по девятый и с пятнадцатого по двадцатый включительно.
+
+--keep-columns СПИСОК
+    Удалить из исходных данных все столбцы, кроме столбцов с указанными
+    номерами. Номера задаются также, как и номера столбцов для опции
+    --remove-columns. Последний столбец, являющийся столбцом значений
+    целевой переменной, всегда будет сохранен
+
 Примечания
 
 1.  AutoSklearnRegressor имеет временные ограничения по умолчанию.
@@ -106,6 +125,33 @@ from sklearn.preprocessing import PowerTransformer
 from xgboost import XGBRegressor
 
 from metrics import assymmetric_mse
+
+
+def number_in_list(num, ranges):
+    """
+    Проверяет, что число num входит в список чисел, заданный перечислением
+    диапазонов
+
+    Параметры
+    ---------
+    num: int
+        Число, которое может входить или не входить в список
+
+    ranges: str
+        Строка со списком чисел, перечисленных через запятую. В строке можно
+        использовать диапазоны. Например, строка "5,8,12,20-25,30,32-38"
+        будет эквивалентна списку [5, 8, 12, 20, 21, 22, 23, 24, 25, 30,
+        32, 33, 34, 35, 36, 37, 38].
+    """
+    chunks = ranges.split(",")
+    for chunk in chunks:
+        if "-" in chunk:
+            (start, end) = [int(x) for x in chunk.split("-")]
+            if num >= start and num <= end:
+                return True
+        elif str(num) == chunk.strip():
+            return True
+    return False
 
 
 def prepare_data(filename: str, auto_normalize: bool = False):
@@ -516,7 +562,9 @@ def fit_regressor(data_filename: str,
                   pca: int = None,
                   verbosity: int = 0,
                   use_xgboost: bool = False,
-                  metric_assymmetry: float = 1):
+                  metric_assymmetry: float = 1,
+                  remove_columns: str = None,
+                  keep_columns: str = None):
     """
     Обучает с помощью Auto-Sklearn регрессор на массиве данных,
     считанном из data_filename и записывает в файл model_filename.
@@ -592,7 +640,21 @@ def fit_regressor(data_filename: str,
         раз) чем за предсказания, оказавшиеся ближе к нулю. Если значение
         больше 1, то мы заставим модель пытаться предсказать по возможности
         меньшие по модулю значения, а если больше - то по возможности большие.
+
+    remove_columns: str, необязателен
+        Список номеров столбцов, которые исключаются из исходных данных перед
+        началом обучения. Должен быть строкой вида "1,2,5-7,12-18".
+
+    keep_columns: str, необязателен
+        Если задан, то убрать все столбцы, кроме перечисленных в этом списке.
+        Список должен быть того же вида, что и для remove_columns. Последний
+        столбец, являющийся целевой переменной, включать в список не нужно,
+        он обязательно будет оставлен
     """
+    if remove_columns or keep_columns:
+        raise NotImplementedError(
+            "Опции remove_columns и keep_columns не реализованы"
+        )
     if metric_assymmetry and use_xgboost:
         raise NotImplementedError("Ассиметричная метрика не работает с XGBoost")
     # Заглушаем предупреждения, если нужно
@@ -820,6 +882,26 @@ if __name__ == "__main__":
         dest="metric_assymmetry"
     )
 
+    parser.add_argument(
+        "--remove-columns",
+        help="Удалить из данных столбцы с указанными номерами",
+        action="store",
+        type=str,
+        default=None,
+        metavar="COLUMN_LIST",
+        dest="remove_columns"
+    )
+
+    parser.add_argument(
+        "--keep-columns",
+        help="Удалить из данных все столбцы кроме указанных",
+        action="store",
+        type=str,
+        default=None,
+        metavar="COLUMN_LIST",
+        dest="keep_columns"
+    )
+
     args = parser.parse_args()
 
     fit_regressor(
@@ -836,5 +918,7 @@ if __name__ == "__main__":
         pca=args.pca,
         verbosity=args.verbosity,
         use_xgboost=args.use_xgboost,
-        metric_assymmetry=args.metric_assymmetry
+        metric_assymmetry=args.metric_assymmetry,
+        remove_columns=args.remove_columns,
+        keep_columns=args.keep_columns
     )
