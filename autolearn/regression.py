@@ -6,6 +6,10 @@ import sys
 
 import pandas as pd
 
+from sklearn.pipeline import Pipeline
+
+from autolearn.preprocessing import DataPreprocessor
+
 from autolearn.metrics import assymmetric_mse
 
 from autolearn.autonormalize import autonormalize
@@ -23,9 +27,7 @@ class RegressionTrainer:
                  n_jobs: int = -1,
                  ensemble_size: int = 1,
                  final_model: str = "first",
-                 auto_normalize: bool = False,
-                 preprocessor: str = None,
-                 pca: int = None,
+                 preprocessor: DataPreprocessor = None,
                  verbosity: int = 9,
                  use_xgboost: bool = False,
                  metric_assymmetry: float = None):
@@ -48,9 +50,7 @@ class RegressionTrainer:
         self.n_jobs = n_jobs
         self.ensemble_size = ensemble_size
         self.final_model = final_model
-        self.auto_normalize = auto_normalize
         self.preprocessor = preprocessor
-        self.pca = pca
         self.verbosity = verbosity
         self.use_xgboost = use_xgboost
         self.metric_assymmetry = metric_assymmetry
@@ -76,23 +76,9 @@ class RegressionTrainer:
         y: numpy.ndarray, shape (n_samples, )
             Вектор значений целевой переменной для обучения
         """
-        # Считываем данные из файла, без заголовка
-        data = pd.read_csv(filename, header=None)
-        # И объявляем последний столбец значениями целевой переменной
-        # Сразу после чтения столбцы будут индексированы числами, так
-        # что столбец с максимальным номером переименовываем в y,
-        # а с остальными номерами N - в строку xN.
-        last_column = len(data.columns) - 1
-        data.rename(
-            columns=lambda x: "y" if x == last_column else "x{}".format(x),
-            inplace=True
-        )
-        # Делим данные на обучающие и тестовые
-        X = data.drop('y', axis='columns').astype(float)
-        if self.auto_normalize:
-            X = np.hstack([x.values for x in autonormalize.auto_normalize(X)])
-        y = data['y'].astype(float).values
-        return (X, y)
+        if self.preprocessor is None:
+            return DataPreprocessor().read_data(self.filename)
+        return preprocessor.read_data(self.filename)
 
     def fit_model(self, model, X, y):
         """
@@ -117,7 +103,7 @@ class RegressionTrainer:
         model : sklearn.BaseEstimator
             Аргумент model
         """
-        if self.preprocessor or self.pca:
+        if isinstance(model, Pipeline):
             if isinstance(model.steps[-1][1], AutoSklearnRegressor):
                 model.fit(X, y)
                 if self.ensemble_size:
