@@ -154,7 +154,11 @@ def number_in_list(num, ranges):
     return False
 
 
-def prepare_data(filename: str, auto_normalize: bool = False):
+def prepare_data(filename: str,
+                 *,
+                 auto_normalize: bool = False,
+                 remove_columns: str = None,
+                 keep_columns: str = None):
     """
     Считывает данные из файла filename, отделяет последний столбец
     как столбец целевых значений, остальное - как матрицу признаков
@@ -167,6 +171,16 @@ def prepare_data(filename: str, auto_normalize: bool = False):
 
     auto_normalize : Логическое, по умолчанию False
         Преобразовать данные с помощью утилиты autonormalize
+
+    remove_columns: str, необязателен
+        Список номеров столбцов, которые исключаются из исходных данных перед
+        началом обучения. Должен быть строкой вида "1,2,5-7,12-18".
+
+    keep_columns: str, необязателен
+        Если задан, то убрать все столбцы, кроме перечисленных в этом списке.
+        Список должен быть того же вида, что и для remove_columns. Последний
+        столбец, являющийся целевой переменной, включать в список не нужно,
+        он обязательно будет оставлен
 
     Возвращает
     ----------
@@ -184,6 +198,22 @@ def prepare_data(filename: str, auto_normalize: bool = False):
     # что столбец с максимальным номером переименовываем в y,
     # а с остальными номерами N - в строку xN.
     last_column = len(data.columns) - 1
+    if keep_columns is not None:
+        # Если нужно оставить только некоторые столбцы - оставляем только их
+        cols = [
+            col for col in data.columns if number_in_list(col, keep_columns)
+        ]
+        if last_column not in cols:
+            cols.append(last_column)
+        data = data[cols]
+    if remove_columns is not None:
+        # Если нужно убрать некоторые столбцы - убираем их
+        cols = [
+            col for col in data.columns if not number_in_list(col, remove_columns)
+        ]
+        if last_column not in cols:
+            cols.append(last_column)
+        data = data[cols]
     data.rename(
         columns=lambda x: "y" if x == last_column else "x{}".format(x),
         inplace=True
@@ -651,10 +681,6 @@ def fit_regressor(data_filename: str,
         столбец, являющийся целевой переменной, включать в список не нужно,
         он обязательно будет оставлен
     """
-    if remove_columns or keep_columns:
-        raise NotImplementedError(
-            "Опции remove_columns и keep_columns не реализованы"
-        )
     if metric_assymmetry and use_xgboost:
         raise NotImplementedError("Ассиметричная метрика не работает с XGBoost")
     # Заглушаем предупреждения, если нужно
@@ -674,7 +700,12 @@ def fit_regressor(data_filename: str,
     else:
         scorer = None
     # Считываем данные из файла, делим на обучающие и тестовые
-    (X, y) = prepare_data(data_filename, auto_normalize=auto_normalize)
+    (X, y) = prepare_data(
+        data_filename,
+        auto_normalize=auto_normalize,
+        remove_columns=remove_columns,
+        keep_columns=keep_columns
+    )
     (X_train, X_test, y_train, y_test) = train_test_split(X, y, random_state=0)
     # Сообщаем пользователю, на каком объеме данных обучаем модель
     if verbosity >= 1:
