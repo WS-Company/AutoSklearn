@@ -34,10 +34,37 @@ import sys
 
 from argparse import ArgumentParser
 
-import joblib
 import warnings
+import joblib
 
 import numpy as np
+
+
+def number_in_list(num, ranges):
+    """
+    Проверяет, что число num входит в список чисел, заданный перечислением
+    диапазонов
+
+    Параметры
+    ---------
+    num: int
+        Число, которое может входить или не входить в список
+
+    ranges: str
+        Строка со списком чисел, перечисленных через запятую. В строке можно
+        использовать диапазоны. Например, строка "5,8,12,20-25,30,32-38"
+        будет эквивалентна списку [5, 8, 12, 20, 21, 22, 23, 24, 25, 30,
+        32, 33, 34, 35, 36, 37, 38].
+    """
+    chunks = ranges.split(",")
+    for chunk in chunks:
+        if "-" in chunk:
+            (start, end) = [int(x) for x in chunk.split("-")]
+            if start <= num <= end:
+                return True
+        elif str(num) == chunk.strip():
+            return True
+    return False
 
 
 def run_predictor(model_filename: str,
@@ -124,12 +151,26 @@ if __name__ == "__main__":
         dest="keep_columns"
     )
     args = parser.parse_args()
-    if args.remove_columns or args.keep_columns:
-        raise NotImplementedError(
-            "Опции --remove-columns и --keep-columns не реализованы"
-        )
+    # Преобразуем данные к числовому типу
+    data=[float(x) for x in args.data.split(",")]
+    if args.remove_columns:
+        # Оставляем только значения, не указанные в списе столбцов на
+        # удаление
+        data = [
+            data[i]
+            for i in range(len(data))
+            if not number_in_list(i, args.remove_columns)
+        ]
+    if args.keep_columns:
+        # Оставляем только те значения, номера которых указаны в списке
+        # столбцов для сохранения
+        data = [
+            data[i]
+            for i in range(len(data))
+            if not number_in_list(i, args.keep_columns)
+        ]
     run_predictor(
         model_filename=args.model_file,
-        data=[float(x) for x in args.data.split(",")],
+        data=data,
         quiet=args.quiet
     )
