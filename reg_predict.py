@@ -167,7 +167,7 @@ if __name__ == "__main__":
         data = [
             data[i]
             for i in range(len(data))
-            if not number_in_list(i, args.keep_columns)
+            if number_in_list(i, args.keep_columns)
         ]
     run_predictor(
         model_filename=args.model_file,
