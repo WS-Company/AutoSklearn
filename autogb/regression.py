@@ -50,6 +50,23 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                  verbosity: int = 9):
         """
         Инициализация автоматического градиентного бустинга
+
+        Параметры
+        ---------
+        use_gridsearch: bool, по умолчанию True
+            Использовать GridSearchCV для подбора гиперпараметров всех
+            обучаемых моделей
+
+        use_sklearn: bool, по умолчанию True
+            Кроме прочих, попробовать обучить модель
+            sklearn.ensemble.GradientBoostingRegressor
+
+        use_extratrees: bool, по умолчанию False
+            Помимо градиентного бустинга, попробовать обучить модель на
+            основе случайного леса sklearn.ensemble.ExtraTreesRegressor
+
+        use_xgboost: bool, по умолчанию True
+            Кроме прочих, обучить модель xgboost.XGBRegressor
         """
         self.use_gridsearch = use_gridsearch
         self.use_sklearn = use_sklearn
