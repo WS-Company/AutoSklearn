@@ -1,7 +1,13 @@
+"""
+Автоматический градиентный бустинг
+"""
+
 from typing import Union
 
 from sklearn.exceptions import NotFittedError
+
 from sklearn.metrics import r2_score
+from sklearn.metrics import make_scorer
 
 from sklearn.base import BaseEstimator
 from sklearn.base import RegressorMixin
@@ -117,7 +123,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                         'max_depth': self.max_depth_,
                         'n_estimators': self.n_estimators_,
                     },
-                    scoring=self.scoring,
+                    scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
                     n_jobs=1
                 )
@@ -155,7 +161,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                         'max_depth': self.max_depth_,
                         'n_estimators': self.n_estimators_
                     },
-                    scoring=self.scoring,
+                    scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
                     n_jobs=1
                 )
@@ -194,7 +200,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                         'colsample_bytree': self.colsample_bytree_,
                         'colsample_bylevel': self.colsample_bylevel_
                     },
-                    scoring=self.scoring,
+                    scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
                     n_jobs=1
                 )
@@ -233,7 +239,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                         'max_depth': self.max_depth_,
                         'n_estimators': self.n_estimators_
                     },
-                    scoring=self.scoring,
+                    scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
                     n_jobs=1
                 )
@@ -272,7 +278,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                         'n_estimators': self.n_estimators_,
                         'colsample_bylevel': self.colsample_bylevel_
                     },
-                    scoring=self.scoring,
+                    scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
                     n_jobs=1
                 )
