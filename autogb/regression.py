@@ -36,7 +36,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                  *,
                  use_gridsearch: bool = True,
                  use_sklearn: bool = True,
-                 use_extratrees: bool = True,
+                 use_extratrees: bool = False,
                  use_xgboost: bool = True,
                  use_lgbm: bool = True,
                  use_catboost: bool = True,
@@ -151,43 +151,49 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.best_score_ = score_test
                 self.best_model_ = model
         if self.use_extratrees:
-            if self.use_gridsearch:
-                model = GridSearchCV(
-                    ExtraTreesRegressor(
-                        random_state=self.random_state,
-                        verbose=self.verbosity - 2
-                    ),
-                    param_grid={
-                        'max_depth': self.max_depth_,
-                        'n_estimators': self.n_estimators_
-                    },
-                    scoring=make_scorer(self.scoring),
-                    verbose=max(self.verbosity - 1, 0),
-                    n_jobs=1
-                )
-            else:
-                model = ExtraTreesRegressor(
-                    random_state=self.random_state,
-                    n_estimators=self.n_estimators_,
-                    max_depth=self.max_depth_,
-                    verbose=max(self.verbosity - 2, 0)
-                )
-            model.fit(X_train, y_train, sample_weight=sample_weight_train)
-            if self.use_gridsearch:
-                model = model.best_estimator_
-            (score_train, score_test) = (
-                self.scoring(y_train, model.predict(X_train)),
-                self.scoring(y_test, model.predict(X_test))
-            )
-            if self.verbosity >= 1:
-                print(
-                    "sklearn.ExtraTreesRegressor score was {} on train, {} on test".format(
-                        score_train, score_test
+            try:
+                if self.use_gridsearch:
+                    model = GridSearchCV(
+                        ExtraTreesRegressor(
+                            random_state=self.random_state,
+                            verbose=self.verbosity - 2
+                        ),
+                        param_grid={
+                            'max_depth': self.max_depth_,
+                            'n_estimators': self.n_estimators_
+                        },
+                        scoring=make_scorer(self.scoring),
+                        verbose=max(self.verbosity - 1, 0),
+                        n_jobs=1
                     )
+                else:
+                    model = ExtraTreesRegressor(
+                        random_state=self.random_state,
+                        n_estimators=self.n_estimators_,
+                        max_depth=self.max_depth_,
+                        verbose=max(self.verbosity - 2, 0)
+                    )
+                model.fit(X_train, y_train, sample_weight=sample_weight_train)
+                if self.use_gridsearch:
+                    model = model.best_estimator_
+                (score_train, score_test) = (
+                    self.scoring(y_train, model.predict(X_train)),
+                    self.scoring(y_test, model.predict(X_test))
                 )
-            if self.best_score_ is None or score_test > self.best_score_:
-                self.best_score_ = score_test
-                self.best_model_ = model
+                if self.verbosity >= 1:
+                    print(
+                        "sklearn.ExtraTreesRegressor score was {} on train, {} on test".format(
+                            score_train, score_test
+                        )
+                    )
+                if self.best_score_ is None or score_test > self.best_score_:
+                    self.best_score_ = score_test
+                    self.best_model_ = model
+            except Exception:
+                # Иногда в процессе обучения случайного леса происходят
+                # ошибки, пока не знаю с чем они связаны, так что просто
+                # игнорируем эту модель и используем другие
+                print("sklearn.ExtraTreesRegressor did not fit, continuing anyway")
         if self.use_xgboost:
             if self.use_gridsearch:
                 model = GridSearchCV(
@@ -233,7 +239,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 model = GridSearchCV(
                     LGBMRegressor(
                         random_state=self.random_state,
-                        verbose=max(self.verbosity - 2, 0)
+                        verbose=-1
                     ),
                     param_grid={
                         'max_depth': self.max_depth_,
@@ -248,7 +254,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     random_state=self.random_state,
                     n_estimators=self.n_estimators_,
                     max_depth=self.max_depth_,
-                    verbose=max(self.verbosity - 2, 0)
+                    verbose=-1
                 )
             model.fit(X_train, y_train, sample_weight=sample_weight_train)
             if self.use_gridsearch:
@@ -339,6 +345,10 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         s = s.strip()
         try:
             # Если строке содержит одно число - вернуть его
+            try:
+                return int(s)
+            except ValueError:
+                pass
             return float(s)
         except ValueError:
             # Разделяем строку на фрагменты, разделенные запятыми

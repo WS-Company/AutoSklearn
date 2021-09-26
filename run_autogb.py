@@ -14,7 +14,10 @@
     Имя файла, в который сохраняем обученную модель. Этот аргумент обязателен.
 
 --disable-extratrees
-    Не обучать регрессор на основе случайного леса
+    Не обучать регрессор на основе случайного леса. Это поведение по умолчанию
+
+--enable-extratrees
+    Обучить также регрессор на основе случайного леса.
 
 --disable-sklearn
     Не обучать регрессор sklearn.GradientBoostingRegressor
@@ -55,6 +58,8 @@ import joblib
 from argparse import ArgumentParser
 
 from sklearn.model_selection import train_test_split
+
+import pandas as pd
 
 from autogb import AutoGBRegressor
 
@@ -127,8 +132,91 @@ if __name__ == "__main__":
         help="Не использовать модель на основе случайного леса",
         action="store_const",
         const=True,
-        default=False,
+        default=True,
         dest="disable_extratrees"
+    )
+    parser.add_argument(
+        "--enable-extratrees",
+        help="Не использовать модель на основе случайного леса",
+        action="store_const",
+        const=False,
+        default=True,
+        dest="disable_extratrees"
+    )
+    parser.add_argument(
+        "--disable-sklearn",
+        help="Не использовать модель sklearn.GradientBoostingRegressor",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="disable_sklearn"
+    )
+    parser.add_argument(
+        "--disable-xgboost",
+        help="Не использовать модель xgboost.XGBRegressor",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="disable_xgboost"
+    )
+    parser.add_argument(
+        "--disable-lgbm",
+        help="Не использовать модель lightgbm.LGBMRegressor",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="disable_lgbm"
+    )
+    parser.add_argument(
+        "--disable-catboost",
+        help="Не использовать модель catboost.CatBoostRegressor",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="disable_catboost"
+    )
+    parser.add_argument(
+        "--disable-gridsearch",
+        help="Не подбирать гиперпараметры, использовать заданные вручную или по умолчанию",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="disable_gridsearch"
+    )
+    parser.add_argument(
+        "--disable-refit",
+        help="Не обучать итоговую модель на полном наборе данных. Она будет обучена примерно на 64% данных",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="disable_refit"
+    )
+    parser.add_argument(
+        "--verbosity",
+        help="Выводить на экран отладочную информацию в просессе работы",
+        action="store",
+        type=int,
+        default=0,
+        metavar="VALUE",
+        dest="verbosity"
+    )
+    parser.add_argument(
+        "--n-estimators",
+        help="Указать число деревьев для построения леса",
+        action="store",
+        type=str,
+        default=None,
+        metavar="NUMBER_OR_RANGE",
+        dest="n_estimators"
+    )
+    parser.add_argument(
+        "--max-depth",
+        help="Указать число уровней деревьев",
+        action="store",
+        type=str,
+        default=None,
+        metavar="NUMBER_OR_RANGE",
+        dest="max_depth"
     )
     args = parser.parse_args()
     # Считать данные и разделить на обучающие и тестовые
@@ -136,7 +224,16 @@ if __name__ == "__main__":
     (X_train, X_test, y_train, y_test) = train_test_split(X, y, random_state=0)
     # Создать модель AutoGB с заданными параметрами
     model = AutoGBRegressor(
-        use_extratrees=not args.disable_extratrees
+        use_extratrees=not args.disable_extratrees,
+        use_sklearn=not args.disable_sklearn,
+        use_xgboost=not args.disable_xgboost,
+        use_lgbm=not args.disable_lgbm,
+        use_catboost=not args.disable_catboost,
+        use_gridsearch=not args.disable_gridsearch,
+        refit=not args.disable_refit,
+        verbosity=args.verbosity,
+        n_estimators=args.n_estimators,
+        max_depth=args.max_depth
     )
     # Обучить модель на обучающих данных
     model.fit(X_train, y_train)
@@ -147,6 +244,7 @@ if __name__ == "__main__":
     print("Качество на тестовых данных = {}".format(model.score(X_test, y_test)))
     print("Лучшая модель обучается на полном наборе данных...")
     # А теперь обучить уже на всех данных и сохранить в файл
-    model.best_model_.fit(X, y)
+    if not args.disable_refit:
+        model.best_model_.fit(X, y)
     joblib.dump(model.best_model_, args.model_filename)
     print("Модель сохранена в файл {}".format(args.model_filename))
