@@ -316,3 +316,38 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
 
     def score(self, X, y, *, sample_weight=None):
         return self.scoring(y, self.predict(X), sample_weight=sample_weight)
+
+    @staticmethod
+    def _str2list(s):
+        """
+        Преобразует строку s, хранящую число, диапазон, список чисел или
+        список диапазонов, в число или список чисел. При этом в списке не
+        должно быть отрицательных чисел, а диапазоны допускаются только
+        между целыми числами.
+
+        Примеры
+        -------
+        AutoGBRegressor._str2list("20") = 20
+        AutoGBRegressor._str2list("3.5") = 3.5
+        AutoGBRegressor._str2list("1,2,4") = [1, 2, 4]
+        AutoGBRegressor._str2list("1,2,4-7,10") = [1, 2, 4, 5, 6, 7, 10]
+        """
+        # Если s - не строка, а число или список, то возвращаем как есть
+        if not isinstance(s, str):
+            return s
+        # Если строка - игнорируем пробелы в начале и конце
+        s = s.strip()
+        try:
+            # Если строке содержит одно число - вернуть его
+            return float(s)
+        except ValueError:
+            # Разделяем строку на фрагменты, разделенные запятыми
+            chunks = s.split(",")
+            result = []
+            for chk in chunks:
+                if "-" in chk:
+                    (a, b) = [int(chk.split("-")[0]), int(chk.split("-")[1])]
+                    result += list(range(a, b + 1))
+                else:
+                    result.append(float(chk))
+            return result
