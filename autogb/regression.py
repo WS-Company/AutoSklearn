@@ -80,28 +80,28 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
             else:
                 self.n_estimators_ = 100
         else:
-            self.n_estimators_ = self.n_estimators
+            self.n_estimators_ = self._str2list(self.n_estimators)
         if self.max_depth is None:
             if self.use_gridsearch:
                 self.max_depth_ = [3, 4, 5]
             else:
                 self.max_depth_ = 3
         else:
-            self.max_depth_ = self.max_depth
+            self.max_depth_ = self._str2list(self.max_depth)
         if self.colsample_bytree is None:
             if self.use_gridsearch:
                 self.colsample_bytree_ = [0.25, 0.5, 0.75, 1.0]
             else:
                 self.colsample_bytree_ = 1.0
         else:
-            self.colsample_bytree_ = self.colsample_bytree
+            self.colsample_bytree_ = self._str2list(self.colsample_bytree)
         if self.colsample_bylevel is None:
             if self.use_gridsearch:
                 self.colsample_bylevel_ = [0.25, 0.5, 0.75, 1.0]
             else:
                 self.colsample_bylevel_ = 1.0
         else:
-            self.colsample_bylevel_ = self.colsample_bylevel
+            self.colsample_bylevel_ = self._str2list(self.colsample_bylevel)
         if sample_weight is None:
             (X_train, X_test, y_train, y_test) = train_test_split(
                 X, y, random_state=self.random_state
