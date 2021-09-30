@@ -2,6 +2,8 @@
 Автоматический градиентный бустинг
 """
 
+import datetime
+
 from typing import Union
 
 from sklearn.exceptions import NotFittedError
@@ -67,7 +69,14 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
 
         use_xgboost: bool, по умолчанию True
             Кроме прочих, обучить модель xgboost.XGBRegressor
+
+        use_lgbm: bool, по умолчанию True
+            Кроме прочих, обучить модель lightgbm.LGBMRegressor
+
+        use_catboost: bool, по умолчанию True
+            Кроме прочих, обучить модель catboost.CatBoostRegressor
         """
+        # Запоминаем параметры
         self.use_gridsearch = use_gridsearch
         self.use_sklearn = use_sklearn
         self.use_extratrees = use_extratrees
@@ -79,10 +88,15 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         self.colsample_bytree = colsample_bytree
         self.colsample_bylevel = colsample_bylevel
         self.random_state = random_state
+        # Если не задана мера качества модели - используем коэффициент
+        # детерминации R2
         self.scoring = scoring or r2_score
         self.refit = refit
         self.verbosity = verbosity
+        # Лучшая из найденных моделей - будет заполнена при обучении
         self.best_model_ = None
+        # Оценка лучшей из найденных моделей на тестовых данных - будет
+        # заполнена при обучении
         self.best_score_ = None
 
     def fit(self, X, y, *, sample_weight=None):
@@ -91,6 +105,12 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         """
         # Количество деревьев. Если используем GridSearch, то задаем список
         # значений-кандидатов, если нет, то значение по умолчанию - 100
+        if self.verbosity >= 1:
+            print(
+                "Training AutoGB model on a set of {} samples and {} features".format(
+                    X.shape[0], X.shape[1]
+                )
+            )
         if self.n_estimators is None:
             if self.use_gridsearch:
                 self.n_estimators_ = [25, 50, 100, 200]
@@ -130,6 +150,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 X, y, sample_weight, random_state=self.random_state
             )
         if self.use_sklearn:
+            start = datetime.datetime.now()
             if self.use_gridsearch:
                 model = GridSearchCV(
                     GradientBoostingRegressor(
@@ -158,10 +179,17 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.scoring(y_train, model.predict(X_train)),
                 self.scoring(y_test, model.predict(X_test))
             )
+            end = datetime.datetime.now()
             if self.verbosity >= 1:
                 print(
                     "sklearn.GradientBoostingRegressor score was {} on train, {} on test".format(
                         score_train, score_test
+                    )
+                )
+            if self.verbosity >= 2:
+                print(
+                    "Fitting sklearn.GradientBoostingRegressor took {} seconds".format(
+                        (end - start).total_seconds()
                     )
                 )
             if self.best_score_ is None or score_test > self.best_score_:
@@ -169,6 +197,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.best_model_ = model
         if self.use_extratrees:
             try:
+                start = datetime.datetime.now()
                 if self.use_gridsearch:
                     model = GridSearchCV(
                         ExtraTreesRegressor(
@@ -203,6 +232,13 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                             score_train, score_test
                         )
                     )
+                end = datetime.datetime.now()
+                if self.verbosity >= 2:
+                    print(
+                        "Fitting sklearn.ExtraTreesRegressor took {} seconds".format(
+                            (end - start).total_seconds()
+                        )
+                    )
                 if self.best_score_ is None or score_test > self.best_score_:
                     self.best_score_ = score_test
                     self.best_model_ = model
@@ -212,6 +248,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 # игнорируем эту модель и используем другие
                 print("sklearn.ExtraTreesRegressor did not fit, continuing anyway")
         if self.use_xgboost:
+            start = datetime.datetime.now()
             if self.use_gridsearch:
                 model = GridSearchCV(
                     XGBRegressor(
@@ -242,16 +279,24 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.scoring(y_train, model.predict(X_train)),
                 self.scoring(y_test, model.predict(X_test))
             )
+            end = datetime.datetime.now()
             if self.verbosity >= 1:
                 print(
                     "xgboost.XGBRegressor score was {} on train, {} on test".format(
                         score_train, score_test
                     )
                 )
+            if self.verbosity >= 2:
+                print(
+                    "Fitting xgboost.XGBRegressor took {} seconds".format(
+                        (end - start).total_seconds()
+                    )
+                )
             if self.best_score_ is None or score_test > self.best_score_:
                 self.best_score_ = score_test
                 self.best_model_ = model
         if self.use_lgbm:
+            start = datetime.datetime.now()
             if self.use_gridsearch:
                 model = GridSearchCV(
                     LGBMRegressor(
@@ -280,16 +325,24 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.scoring(y_train, model.predict(X_train)),
                 self.scoring(y_test, model.predict(X_test))
             )
+            end = datetime.datetime.now()
             if self.verbosity >= 1:
                 print(
                     "lightgbm.LGBMRegressor score was {} on train, {} on test".format(
                         score_train, score_test
                     )
                 )
+            if self.verbosity >= 2:
+                print(
+                    "Fitting lightgbm.LGBMRegressor took {} seconds".format(
+                        (end - start).total_seconds()
+                    )
+                )
             if self.best_score_ is None or score_test > self.best_score_:
                 self.best_score_ = score_test
                 self.best_model_ = model
         if self.use_catboost:
+            start = datetime.datetime.now()
             if self.use_gridsearch:
                 model = GridSearchCV(
                     CatBoostRegressor(
@@ -320,10 +373,17 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.scoring(y_train, model.predict(X_train)),
                 self.scoring(y_test, model.predict(X_test))
             )
+            end = datetime.datetime.now()
             if self.verbosity >= 1:
                 print(
                     "catboost.CatBoostRegressor score was {} on train, {} on test".format(
                         score_train, score_test
+                    )
+                )
+            if self.verbosity >= 2:
+                print(
+                    "Fitting catboost.CatBoostRegressor took {} seconds".format(
+                        (end - start).total_seconds()
                     )
                 )
             if self.best_score_ is None or score_test > self.best_score_:
