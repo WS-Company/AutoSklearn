@@ -46,6 +46,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                  max_depth: Union[int, list] = None,
                  colsample_bytree: Union[float, list] = None,
                  colsample_bylevel: Union[float, list] = None,
+                 subsample: Union[float, list] = None,
                  refit: bool = True,
                  random_state: int = None,
                  scoring: callable = None,
@@ -87,6 +88,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         self.max_depth = max_depth
         self.colsample_bytree = colsample_bytree
         self.colsample_bylevel = colsample_bylevel
+        self.subsample = subsample
         self.random_state = random_state
         # Если не задана мера качества модели - используем коэффициент
         # детерминации R2
@@ -139,6 +141,13 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.colsample_bylevel_ = 1.0
         else:
             self.colsample_bylevel_ = self._str2list(self.colsample_bylevel)
+        if self.subsample is None:
+            if self.use_gridsearch:
+                self.subsample_ = [0.25, 0.5, 0.75, 1.0]
+            else:
+                self.subsample_ = 1.0
+        else:
+            self.subsample_ = self._str2list(self.subsample)
         if sample_weight is None:
             (X_train, X_test, y_train, y_test) = train_test_split(
                 X, y, random_state=self.random_state
@@ -305,7 +314,8 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     ),
                     param_grid={
                         'max_depth': self.max_depth_,
-                        'n_estimators': self.n_estimators_
+                        'n_estimators': self.n_estimators_,
+                        'subsample': self.subsample_
                     },
                     scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
@@ -316,6 +326,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     random_state=self.random_state,
                     n_estimators=self.n_estimators_,
                     max_depth=self.max_depth_,
+                    subsample=self.subsample_,
                     verbose=-1
                 )
             model.fit(X_train, y_train, sample_weight=sample_weight_train)
