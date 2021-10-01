@@ -50,7 +50,8 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                  refit: bool = True,
                  random_state: int = None,
                  scoring: callable = None,
-                 verbosity: int = 9):
+                 verbosity: int = 9,
+                 n_jobs: int = 1):
         """
         Инициализация автоматического градиентного бустинга
 
@@ -76,6 +77,18 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
 
         use_catboost: bool, по умолчанию True
             Кроме прочих, обучить модель catboost.CatBoostRegressor
+
+        n_estimators: int, list или str, необязателен
+            Количество деревьев, которые будут построены при обучении модели.
+            В случае, если параметр use_gridsearch равен True, должен быть
+            списком и по умолчанию устанавливается в [25, 50, 100, 200].
+            Если GridSearchCV не используется, должен быть числом и по
+            умолчанию равен 100. В случае строки должен быть строкой,
+            содержащей число или список чисел, разделенных запятыми.
+
+        max_depth: int, list или str, необязателен
+            Максимальная глубина деревьев, которые будут построены при обучении
+            модели
         """
         # Запоминаем параметры
         self.use_gridsearch = use_gridsearch
@@ -95,6 +108,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         self.scoring = scoring or r2_score
         self.refit = refit
         self.verbosity = verbosity
+        self.n_jobs = n_jobs
         # Лучшая из найденных моделей - будет заполнена при обучении
         self.best_model_ = None
         # Оценка лучшей из найденных моделей на тестовых данных - будет
@@ -105,14 +119,15 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         """
         Обучает модели и выбирает лучшую
         """
-        # Количество деревьев. Если используем GridSearch, то задаем список
-        # значений-кандидатов, если нет, то значение по умолчанию - 100
+        # Сообщить пользователю, сколько у нас примеров и сколько признаков
         if self.verbosity >= 1:
             print(
                 "Training AutoGB model on a set of {} samples and {} features".format(
                     X.shape[0], X.shape[1]
                 )
             )
+        # Количество деревьев. Если используем GridSearch, то задаем список
+        # значений-кандидатов, если нет, то значение по умолчанию - 100
         if self.n_estimators is None:
             if self.use_gridsearch:
                 self.n_estimators_ = [25, 50, 100, 200]
@@ -120,6 +135,9 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.n_estimators_ = 100
         else:
             self.n_estimators_ = self._str2list(self.n_estimators)
+        # Максимальная глубина деревьев. Если используем GridSearch, то
+        # по умолчанию перебираем значения 3, 4 и 5, в противном случае
+        # используем значение 3.
         if self.max_depth is None:
             if self.use_gridsearch:
                 self.max_depth_ = [3, 4, 5]
@@ -127,6 +145,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.max_depth_ = 3
         else:
             self.max_depth_ = self._str2list(self.max_depth)
+        # Параметр colsample_bytree, используемый рядом моделей
         if self.colsample_bytree is None:
             if self.use_gridsearch:
                 self.colsample_bytree_ = [0.25, 0.5, 0.75, 1.0]
@@ -134,6 +153,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.colsample_bytree_ = 1.0
         else:
             self.colsample_bytree_ = self._str2list(self.colsample_bytree)
+        # Параметр colsample_bylevel, используемый рядом моделей
         if self.colsample_bylevel is None:
             if self.use_gridsearch:
                 self.colsample_bylevel_ = [0.25, 0.5, 0.75, 1.0]
@@ -141,6 +161,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                 self.colsample_bylevel_ = 1.0
         else:
             self.colsample_bylevel_ = self._str2list(self.colsample_bylevel)
+        # Параметр subsamble
         if self.subsample is None:
             if self.use_gridsearch:
                 self.subsample_ = [0.25, 0.5, 0.75, 1.0]
@@ -149,16 +170,23 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
         else:
             self.subsample_ = self._str2list(self.subsample)
         if sample_weight is None:
+            # Разделяем данные на обучающие и тестовые
             (X_train, X_test, y_train, y_test) = train_test_split(
                 X, y, random_state=self.random_state
             )
             sample_weight_train = None
             sample_weight_test = None
         else:
-            (X_train, X_test, y_train, y_test, sample_weight_train, sample_weight_test) = train_test_split(
+            # Разделяем данные на обучающие и тестовые, сохранив при этом
+            # веса обучающих примеров, если они заданы
+            (
+                X_train, X_test, y_train, y_test,
+                sample_weight_train, sample_weight_test
+            ) = train_test_split(
                 X, y, sample_weight, random_state=self.random_state
             )
         if self.use_sklearn:
+            # Обучаем регрессор sklearn.ensamble.GradientBoostingRegressor
             start = datetime.datetime.now()
             if self.use_gridsearch:
                 model = GridSearchCV(
@@ -172,7 +200,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     },
                     scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
-                    n_jobs=1
+                    n_jobs=self.n_jobs
                 )
             else:
                 model = GradientBoostingRegressor(
@@ -219,7 +247,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                         },
                         scoring=make_scorer(self.scoring),
                         verbose=max(self.verbosity - 1, 0),
-                        n_jobs=1
+                        n_jobs=self.n_jobs
                     )
                 else:
                     model = ExtraTreesRegressor(
@@ -271,7 +299,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     },
                     scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
-                    n_jobs=1
+                    n_jobs=self.n_jobs
                 )
             else:
                 model = XGBRegressor(
@@ -315,11 +343,12 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     param_grid={
                         'max_depth': self.max_depth_,
                         'n_estimators': self.n_estimators_,
-                        'subsample': self.subsample_
+                        'subsample': self.subsample_,
+                        'colsample_bytree': self.colsample_bytree_
                     },
                     scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
-                    n_jobs=1
+                    n_jobs=self.n_jobs
                 )
             else:
                 model = LGBMRegressor(
@@ -327,6 +356,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     n_estimators=self.n_estimators_,
                     max_depth=self.max_depth_,
                     subsample=self.subsample_,
+                    colsample_bytree=self.colsample_bytree_,
                     verbose=-1
                 )
             model.fit(X_train, y_train, sample_weight=sample_weight_train)
@@ -367,7 +397,7 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
                     },
                     scoring=make_scorer(self.scoring),
                     verbose=max(self.verbosity - 1, 0),
-                    n_jobs=1
+                    n_jobs=self.n_jobs
                 )
             else:
                 model = CatBoostRegressor(
@@ -404,11 +434,21 @@ class AutoGBRegressor(BaseEstimator, RegressorMixin):
             self.best_model_.fit(X, y)
 
     def predict(self, X):
+        """
+        Вычисляет прогнозируемые значения целевой переменной для матрицы
+        признаков X
+        """
         if self.best_model_:
             return self.best_model_.predict(X)
         raise NotFitterError("AutoGBRegressor not fitted yet")
 
     def score(self, X, y, *, sample_weight=None):
+        """
+        Вычисляет качество предсказания модели для матрицы признаков X и
+        столбца значений целевой переменной y. Используется метрика качества
+        модели self.scoring, по умолчанию соответствующая коэффициенту
+        детерминации R2.
+        """
         return self.scoring(y, self.predict(X), sample_weight=sample_weight)
 
     @staticmethod
