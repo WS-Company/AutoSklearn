@@ -11,9 +11,11 @@ def sequential_r2_score(model,
                         *,
                         start: int = 10,
                         step: int = 1,
+                        limit: int = None,
                         sample_weight = None,
                         assymmetry: float = None,
-                        quantile: float = None):
+                        quantile: float = None,
+                        verbose: bool = False):
     """
     Последовательная оценка R2 для модели регрессии. Вычисляется
     следующим образом. Сначала модель обучается на `start` первых
@@ -39,6 +41,8 @@ def sequential_r2_score(model,
 
     step: int, по умолчанию 1
 
+    limit: int, необязателен
+
     sample_weight: numpy.ndarray формы (n_samples), необязателен
         В данный момент не используется
 
@@ -46,6 +50,10 @@ def sequential_r2_score(model,
         В данный момент не используется
 
     quantile: float, необязателен
+
+    verbose: bool, по умолчанию False
+        Если True, то выводить на экран промежуточные
+        результаты вычислений и окончательный результат
     """
     if sample_weight is not None or assymmetry is not None:
         raise NotImplementedError(
@@ -54,12 +62,24 @@ def sequential_r2_score(model,
     scores = []
     (n_samples, n_features) = X.shape
     for i in range(start, n_samples, step):
-        X_train = X[:i]
+        if limit:
+            X_train = X[max(i - limit, 0):i]
+            y_train = y[max(i - limit, 0):i]
+        else:
+            X_train = X[:i]
+            y_train = y[:i]
         X_test = X[i:i + step]
-        y_train = y[:i]
         y_test = y[i:i + step]
         model.fit(X_train, y_train)
-        scores.append(model.score(X_test, y_test))
+        score = model.score(X_test, y_test)
+        scores.append(score)
+        if verbose:
+            print(
+                "Trained on samples {}:{}, tested on {}:{}, score={}".format(
+                    0 if limit is None else max(i - limit, 0),
+                    i, i, min(i + step, n_samples), score
+                )
+            )
     if quantile is None:
         return pd.Series(scores).mean()
     else:
