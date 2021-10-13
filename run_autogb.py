@@ -104,7 +104,7 @@ def number_in_list(num, ranges):
     """
     chunks = ranges.split(",")
     for chunk in chunks:
-        if "-" in chunk:
+        if "-" in chunk[1:]:
             (start, end) = [int(x) for x in chunk.split("-")]
             if num >= start and num <= end:
                 return True
