@@ -51,6 +51,28 @@
     Задать максимальную глубину деревьев. При использовании перебора
     гиперпараметров значение может быть числом, либо диапазоном чисел,
     а без перебора - только числом.
+
+--remove-columns СПИСОК
+    Удалить из исходных данных столбцы с указанными номерами. Номера
+    столбцов задаются в формате списка диапазонов или отдельных чисел -
+    например, "1,3,7-9,15-20" удалить первый столбец, третий, с седьмого
+    по девятый и с пятнадцатого по двадцатый включительно.
+
+--keep-columns СПИСОК
+    Удалить из исходных данных все столбцы, кроме столбцов с указанными
+    номерами. Номера задаются также, как и номера столбцов для опции
+    --remove-columns. Последний столбец, являющийся столбцом значений
+    целевой переменной, всегда будет сохранен
+
+--named-columns
+    Считать первую строку файла с данными строкой заголовка, содержащей
+    имена столбцов. Пока этот аргумент не реализован
+
+--target НАЗВАНИЕ_ИЛИ_НОМЕР
+    Считать именно этот столбец, а не последний, столбцом значений
+    целевой переменной. Если задана опция --named-columns то указывается
+    название столбца, иначе номер. Если номер отрицателен, то отсчет
+    идет с конца, -1 для последнего столбца, -2 для предпоследнего.
 """
 
 import joblib
@@ -64,7 +86,38 @@ import pandas as pd
 from autogb import AutoGBRegressor
 
 
-def prepare_data(filename: str):
+def number_in_list(num, ranges):
+    """
+    Проверяет, что число num входит в список чисел, заданный перечислением
+    диапазонов
+
+    Параметры
+    ---------
+    num: int
+        Число, которое может входить или не входить в список
+
+    ranges: str
+        Строка со списком чисел, перечисленных через запятую. В строке можно
+        использовать диапазоны. Например, строка "5,8,12,20-25,30,32-38"
+        будет эквивалентна списку [5, 8, 12, 20, 21, 22, 23, 24, 25, 30,
+        32, 33, 34, 35, 36, 37, 38].
+    """
+    chunks = ranges.split(",")
+    for chunk in chunks:
+        if "-" in chunk:
+            (start, end) = [int(x) for x in chunk.split("-")]
+            if num >= start and num <= end:
+                return True
+        elif str(num) == chunk.strip():
+            return True
+    return False
+
+
+def prepare_data(filename: str,
+                 *,
+                 remove_columns: str = None,
+                 keep_columns: str = None,
+                 target: str = None):
     """
     Считывает данные из файла filename, отделяет последний столбец
     как столбец целевых значений, остальное - как матрицу признаков
@@ -90,11 +143,32 @@ def prepare_data(filename: str):
     """
     # Считываем данные из файла, без заголовка
     data = pd.read_csv(filename, header=None)
-    # И объявляем последний столбец значениями целевой переменной
+    # И объявляем последний или заданый столбец значениями целевой переменной
+    if target is None:
+        last_column = len(data.columns) - 1
+    else:
+        last_column = int(target)
+    if last_column < 0:
+        last_column = len(data.columns) - 1
+    if keep_columns is not None:
+        # Если нужно оставить только некоторые столбцы - оставляем только их
+        cols = [
+            col for col in data.columns if number_in_list(col, keep_columns)
+        ]
+        if last_column not in cols:
+            cols.append(last_column)
+        data = data[cols]
+    if remove_columns is not None:
+        # Если нужно убрать некоторые столбцы - убираем их
+        cols = [
+            col for col in data.columns if not number_in_list(col, remove_columns)
+        ]
+        if last_column not in cols:
+            cols.append(last_column)
+        data = data[cols]
     # Сразу после чтения столбцы будут индексированы числами, так
     # что столбец с максимальным номером переименовываем в y,
     # а с остальными номерами N - в строку xN.
-    last_column = len(data.columns) - 1
     data.rename(
         columns=lambda x: "y" if x == last_column else "x{}".format(x),
         inplace=True
@@ -185,7 +259,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--disable-refit",
-        help="Не обучать итоговую модель на полном наборе данных. Она будет обучена примерно на 64% данных",
+        help="Не обучать итоговую модель на полном наборе данных. Она будет обучена примерно на 64 процентах данных",
         action="store_const",
         const=True,
         default=False,
@@ -193,7 +267,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verbosity",
-        help="Выводить на экран отладочную информацию в просессе работы",
+        help="Выводить на экран отладочную информацию в процессе работы",
         action="store",
         type=int,
         default=0,
@@ -218,9 +292,41 @@ if __name__ == "__main__":
         metavar="NUMBER_OR_RANGE",
         dest="max_depth"
     )
+    parser.add_argument(
+        "--remove-columns",
+        help="Удалить из данных столбцы с указанными номерами",
+        action="store",
+        type=str,
+        default=None,
+        metavar="COLUMN_LIST",
+        dest="remove_columns"
+    )
+    parser.add_argument(
+        "--keep-columns",
+        help="Удалить из данных все столбцы кроме указанных",
+        action="store",
+        type=str,
+        default=None,
+        metavar="COLUMN_LIST",
+        dest="keep_columns"
+    )
+    parser.add_argument(
+        "--target",
+        help="Считать этот столбец столбцом целевой переменной",
+        action="store",
+        type=str,
+        default=None,
+        metavar="COLUMN",
+        dest="target"
+    )
     args = parser.parse_args()
     # Считать данные и разделить на обучающие и тестовые
-    (X, y) = prepare_data(args.data_filename)
+    (X, y) = prepare_data(
+        args.data_filename,
+        keep_columns=args.keep_columns,
+        remove_columns=args.remove_columns,
+        target=args.target
+    )
     (X_train, X_test, y_train, y_test) = train_test_split(X, y, random_state=0)
     # Создать модель AutoGB с заданными параметрами
     model = AutoGBRegressor(
